@@ -117,7 +117,7 @@ def ComputeMassPerMeter(volume_conductor, volume_L1, volume_L2, volume_L3, densi
 def main():
     # Given parameters in SI base units (meters, kilograms, seconds)
     power = 1e6             # Power in watts (W) (1 MW)
-    voltage = 11000         # Transmission voltage in volts (V)
+    voltage = 30000         # Transmission voltage in volts (V)
     safety_factor = 5
     E_dil = 272e6           # Dielectric strength in V/m (272 V/µm converted to V/m)
 
@@ -178,7 +178,7 @@ def main():
     plt.plot(distances, weights_cu, 'r-', lw=2, label='Copper Cable')
     plt.xlabel("Distance (m)")
     plt.ylabel("Cable Weight (kg)")
-    plt.title("Lunar Transmission Line: Cable Weight vs. Distance\n(1 MW, 11 kV, Resistivity @ 121 °C; Aluminum vs. Copper)")
+    plt.title(f"Lunar Transmission Line: Cable Weight vs. Distance\n({power/1e6} MW, {voltage/1e3} kV, Resistivity @ 121 °C; 5% Loss Limit)")
     plt.legend()
     plt.grid(True)
     plt.show()
