@@ -1,7 +1,13 @@
-import numpy as np
+mport numpy as np
 import pandas as pd
-import ace_tools as tools
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 #TODO make more advance add more parameters and use some optimazation method to find the optimal maybe SGD
+
+#TODO Make plots that are usefull
+#TODO make things easier find first material for the cable first, look at the ratio between p/density and look at area^2 vs weight and think of insulation
+
 # Constants for material properties (Resistivity in Ω·m, Density in kg/m³)
 materials = {
     "Copper (Cu)": {"resistivity": 1.68e-8, "density": 8960},
@@ -38,4 +44,31 @@ for material, props in materials.items():
 df = pd.DataFrame(results, columns=["Material", "Voltage (V)", "Power (W)", "Length (m)", 
                                     "Resistance (Ω)", "Power Loss (W)", "Weight (kg)", "Diameter (m)"])
 
-tools.display_dataframe_to_user(name="Lunar Power Cable Optimization", dataframe=df)
+print(df)  # Basic print
+
+# Plot 1: Power Loss vs Transmission Length
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=df, x="Length (m)", y="Power Loss (W)", hue="Material", style="Voltage (V)", markers=True)
+plt.title("Power Loss vs Transmission Length")
+plt.xlabel("Transmission Length (m)")
+plt.ylabel("Power Loss (W)")
+plt.legend(title="Material & Voltage")
+plt.show()
+
+# Plot 2: Weight vs Transmission Length
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=df, x="Length (m)", y="Weight (kg)", hue="Material", style="Voltage (V)", markers=True)
+plt.title("Cable Weight vs Transmission Length")
+plt.xlabel("Transmission Length (m)")
+plt.ylabel("Weight (kg)")
+plt.legend(title="Material & Voltage")
+plt.show()
+
+# Plot 3: Resistance vs Transmission Length
+plt.figure(figsize=(10, 5))
+sns.lineplot(data=df, x="Length (m)", y="Resistance (Ω)", hue="Material", style="Voltage (V)", markers=True)
+plt.title("Cable Resistance vs Transmission Length")
+plt.xlabel("Transmission Length (m)")
+plt.ylabel("Resistance (Ω)")
+plt.legend(title="Material & Voltage")
+plt.show(
