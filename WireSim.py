@@ -2,6 +2,47 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
+def plot_resistivity_vs_temperature():
+    """
+    Plots the resistivity of various materials versus temperature from -200°C to 250°C.
+    
+    The resistivity is computed using a linear model:
+        ρ(T) = ρ₀ [1 + α (T - T₀)]
+    where ρ₀ is the resistivity at the reference temperature T₀.
+    
+    Materials included:
+      - Copper: ρ₀ = 1.68e-8 Ω·m, α = 0.00393/°C, T₀ = 20°C
+      - Aluminum: ρ₀ = 2.82e-8 Ω·m, α = 0.00403/°C, T₀ = 20°C
+      - Tungsten: ρ₀ = 5.60e-8 Ω·m, α = 0.0045/°C, T₀ = 20°C
+      - Iron: ρ₀ = 9.71e-8 Ω·m, α = 0.005/°C, T₀ = 20°C
+    """
+    # Temperature range in °C
+    T = np.linspace(-200, 250, 500)
+    
+    # Define material properties: (ρ₀ [Ω·m], α [1/°C], T₀ [°C])
+    materials = {
+        "Copper":   (1.68e-8, 0.00393, 20),
+        "Aluminum": (2.65e-8, 0.00403, 20),
+    }
+    
+    plt.figure(figsize=(10, 6))
+    
+    for name, (rho0, alpha, T0) in materials.items():
+        # Calculate resistivity using the linear approximation
+        rho = rho0 * (1 + alpha * (T - T0))
+        # Clip any negative resistivity values to zero (not physical)
+        rho = np.clip(rho, 0, None)
+        plt.plot(T, rho, label=name)
+    
+    plt.xlabel("Temperature (°C)")
+    plt.ylabel("Resistivity (Ω·m)")
+    plt.title("Resistivity vs. Temperature for Various Materials")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
+
 def InsulationThickness(V, E_dil, safety_factor):
     """
     Calculate the required insulation thickness in meters.
@@ -75,44 +116,73 @@ def ComputeMassPerMeter(volume_conductor, volume_L1, volume_L2, volume_L3, densi
 
 def main():
     # Given parameters in SI base units (meters, kilograms, seconds)
-    Length = 1000           # Transmission line length in meters (m)
     power = 1e6             # Power in watts (W) (1 MW)
     voltage = 11000         # Transmission voltage in volts (V)
     safety_factor = 5
-    E_dil = 272e6  # in V/m      # Dielectric strength in V/m (equivalent to 272 V/mm)
+    E_dil = 272e6           # Dielectric strength in V/m (272 V/µm converted to V/m)
 
     # Material properties in SI units
-    resistivity_aluminum = 2.82e-8  # Ω·m for aluminum
-    density_kapton = 1420           # kg/m³ (1.42 g/cm³)
-    density_bn = 2100               # kg/m³ (2.1 g/cm³)
-    density_al = 2700               # kg/m³ (2.7 g/cm³)
+    # Resistivities (Ω·m)
+    resistivity_aluminum = 3.73e-8  # Aluminum @ 121°C
+    resistivity_copper   = 2.357e-8 # Copper @ 121°C
+    # Densities (kg/m³)
+    density_al       = 2700    # Aluminum conductor
+    density_copper   = 8960    # Copper conductor
+    density_kapton   = 1420    # Kapton insulation (from 1.42 g/cm³)
+    density_bn       = 2100    # BN nano-coating (from 2.1 g/cm³)
+    density_mesh     = 2700    # Aluminum mesh
 
-    # Calculate required conductor radius in meters
-    radius_conductor = conductor_radius(resistivity_aluminum, voltage, Length, power, loss_limit=0.05)
-    print(f"Required conductor radius: {radius_conductor*1000:.3f} mm")
+    # Define constant layer thicknesses in meters:
+    thickness_bn      = 0.0001   # BN nano-coating: 0.1 mm
+    thickness_al_mesh = 0.001    # Aluminum mesh: 1.0 mm
+    # Insulation thickness (Kapton) is computed based on voltage, dielectric strength, and safety factor.
+    thickness_kapton  = InsulationThickness(voltage, E_dil, safety_factor)
 
-    # Calculate insulation thickness (Kapton) in meters
-    thickness_kapton = InsulationThickness(voltage, E_dil, safety_factor)
+    # --- Initial calculation for a 1000 m aluminum cable ---
+    L_initial = 1000  # 1000 m cable length for initial report
+    radius_conductor_al = conductor_radius(resistivity_aluminum, voltage, L_initial, power, loss_limit=0.05)
+    volumes_al = VolumeConductor(radius_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh)
+    mass_per_meter_al = ComputeMassPerMeter(volumes_al[0], volumes_al[1], volumes_al[2], volumes_al[3],
+                                            density_al, density_kapton, density_bn, density_mesh)
+    total_weight_al = mass_per_meter_al * L_initial
+    total_radius_al = radius_conductor_al + thickness_kapton + thickness_bn + thickness_al_mesh
+    print(f"--- For a {L_initial} m aluminum cable ---")
+    print(f"Required conductor radius: {radius_conductor_al*1000:.3f} mm")
     print(f"Kapton insulation thickness: {thickness_kapton*1000:.3f} mm")
-
-    # Define thicknesses for BN nano-coating and Aluminum mesh in meters
-    thickness_bn = 0.0001    # 0.1 mm = 0.0001 m
-    thickness_al_mesh = 0.001  # 1.0 mm = 0.001 m
-
-    # Compute total cable radius in meters
-    total_radius = radius_conductor + thickness_kapton + thickness_bn + thickness_al_mesh
-
-    # Compute volume per meter for each component
-    volumes = VolumeConductor(radius_conductor, thickness_kapton, thickness_bn, thickness_al_mesh)
-
-    # Compute mass per meter (kg/m) of the cable
-    mass_per_meter = ComputeMassPerMeter(volumes[0], volumes[1], volumes[2], volumes[3],
-                                         density_al, density_kapton, density_bn, density_al)
-
-    # Total cable weight for the given length (kg)
-    total_weight = mass_per_meter * Length
-    print(f"Total cable weight for {Length} m: {total_weight:.2f} kg")
-    print(f"Total cable radius: {total_radius*1000:.3f} mm")
+    print(f"Total cable radius: {total_radius_al*1000:.3f} mm")
+    print(f"Total cable weight: {total_weight_al:.2f} kg")
     print(f"Total current: {power/voltage:.2f} A")
+
+    # --- Plot total cable weight vs. cable length for Aluminum and Copper ---
+    distances = np.linspace(100, 10000, 100)  # Cable lengths from 100 m to 10 km
+    weights_al = []
+    weights_cu = []
+
+    for L in distances:
+        # Aluminum cable calculations
+        r_conductor_al = conductor_radius(resistivity_aluminum, voltage, L, power, loss_limit=0.05)
+        vols_al = VolumeConductor(r_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh)
+        m_per_meter_al = ComputeMassPerMeter(vols_al[0], vols_al[1], vols_al[2], vols_al[3],
+                                             density_al, density_kapton, density_bn, density_mesh)
+        weights_al.append(m_per_meter_al * L)
+        
+        # Copper cable calculations
+        r_conductor_cu = conductor_radius(resistivity_copper, voltage, L, power, loss_limit=0.05)
+        vols_cu = VolumeConductor(r_conductor_cu, thickness_kapton, thickness_bn, thickness_al_mesh)
+        m_per_meter_cu = ComputeMassPerMeter(vols_cu[0], vols_cu[1], vols_cu[2], vols_cu[3],
+                                             density_copper, density_kapton, density_bn, density_mesh)
+        weights_cu.append(m_per_meter_cu * L)
+
+    plt.figure(figsize=(8, 6))
+    plt.plot(distances, weights_al, 'b-', lw=2, label='Aluminum Cable')
+    plt.plot(distances, weights_cu, 'r-', lw=2, label='Copper Cable')
+    plt.xlabel("Distance (m)")
+    plt.ylabel("Cable Weight (kg)")
+    plt.title("Lunar Transmission Line: Cable Weight vs. Distance\n(1 MW, 11 kV, Resistivity @ 121 °C; Aluminum vs. Copper)")
+    plt.legend()
+    plt.grid(True)
+    plt.show()
+
 if __name__ == "__main__":
     main()
+    #plot_resistivity_vs_temperature()
