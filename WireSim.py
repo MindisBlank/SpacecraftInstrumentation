@@ -125,6 +125,7 @@ def main():
     # Resistivities (Ω·m)
     resistivity_aluminum = 3.73e-8  # Aluminum @ 121°C
     resistivity_copper   = 2.357e-8 # Copper @ 121°C
+
     # Densities (kg/m³)
     density_al       = 2700    # Aluminum conductor
     density_copper   = 8960    # Copper conductor
