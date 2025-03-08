@@ -2,6 +2,62 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+def plot_weight_vs_voltage_for_1km_al(power, length,
+                                      resistivity_aluminum,
+                                      density_al, density_kapton, density_bn, density_mesh,
+                                      E_dil, safety_factor):
+    """
+    Plots how the total weight of a 1 km Aluminum cable varies with transmission voltage,
+    using a logarithmic scale on both axes.
+    """
+    # Range of voltages to explore: 1 kV to 100 kV
+    voltages = np.linspace(1e3, 1e5, 50)
+    
+    loss_limit = 0.05
+    thickness_bn = 0.0001
+    thickness_al_mesh = 0.001
+
+    weights = []
+    for V in voltages:
+        # Calculate insulation thickness for each voltage
+        thickness_kapton = InsulationThickness(V, E_dil, safety_factor)
+        
+        # Conductor radius to keep under 5% loss
+        r_conductor_al = conductor_radius(
+            resistivity_aluminum, V, length, power, loss_limit
+        )
+        
+        # Calculate volumes
+        vols_al = VolumeConductor(
+            r_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh
+        )
+        
+        # Mass per meter
+        m_per_meter_al = ComputeMassPerMeter(
+            vols_al[0], vols_al[1], vols_al[2], vols_al[3],
+            density_al, density_kapton, density_bn, density_mesh
+        )
+        
+        # Weight for the given length (1 km)
+        total_weight = m_per_meter_al * length
+        weights.append(total_weight)
+    
+    plt.figure(figsize=(8, 6))
+    plt.plot(voltages, weights, label='Aluminum Cable (1 km)')
+    
+    # Use a log scale on both axes
+    plt.xscale("log")
+    plt.yscale("log")
+    
+    plt.xlabel("Voltage (V) [Log Scale]")
+    plt.ylabel("Total Cable Weight (kg) [Log Scale]")
+    plt.title(
+        f"Weight of 1 km Aluminum Cable vs. Transmission Voltage (Logarithmic)\n"
+        f"({power/1e6:.0f} MW, 5% Loss Limit)"
+    )
+    plt.grid(True)
+    plt.legend()
+    plt.show()
 
 def plot_resistivity_vs_temperature():
     """
@@ -183,6 +239,20 @@ def main():
     plt.legend()
     plt.grid(True)
     plt.show()
+
+    # Now produce the new plot requested:
+    plot_weight_vs_voltage_for_1km_al(
+        power=power,
+        length=L_initial,
+        resistivity_aluminum=resistivity_aluminum,
+        density_al=density_al,
+        density_kapton=density_kapton,
+        density_bn=density_bn,
+        density_mesh=density_mesh,
+        E_dil=E_dil,
+        safety_factor=safety_factor
+    )
+
 
 if __name__ == "__main__":
     main()
