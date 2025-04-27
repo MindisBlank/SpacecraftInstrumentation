@@ -2,100 +2,102 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-def plot_weight_vs_voltage_for_1km_al(power, length,
-                                      resistivity_aluminum,
-                                      density_al, density_kapton, density_bn, density_mesh,
-                                      E_dil, safety_factor):
-    """
-    Plots how the total weight of a 1 km Aluminum cable varies with transmission voltage,
-    using a logarithmic scale on both axes.
-    """
-    # Range of voltages to explore: 1 kV to 100 kV
-    voltages = np.linspace(1e3, 1e5, 50)
-    
-    loss_limit = 0.05
-    thickness_bn = 0.0001
-    thickness_al_mesh = 0.001
+from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
-    weights = []
-    for V in voltages:
-        # Calculate insulation thickness for each voltage
-        thickness_kapton = InsulationThickness(V, E_dil, safety_factor)
-        
-        # Conductor radius to keep under 5% loss
-        r_conductor_al = conductor_radius(
-            resistivity_aluminum, V, length, power, loss_limit
-        )
-        
-        # Calculate volumes
-        vols_al = VolumeConductor(
-            r_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh
-        )
-        
-        # Mass per meter
-        m_per_meter_al = ComputeMassPerMeter(
-            vols_al[0], vols_al[1], vols_al[2], vols_al[3],
-            density_al, density_kapton, density_bn, density_mesh
-        )
-        
-        # Weight for the given length (1 km)
-        total_weight = m_per_meter_al * length
-        weights.append(total_weight)
-    
-    plt.figure(figsize=(8, 6))
-    plt.plot(voltages, weights, label='Aluminum Cable (1 km)')
-    
-    # Use a log scale on both axes
-    plt.xscale("log")
-    plt.yscale("log")
-    
-    plt.xlabel("Voltage (V) [Log Scale]")
-    plt.ylabel("Total Cable Weight (kg) [Log Scale]")
-    plt.title(
-        f"Weight of 1 km Aluminum Cable vs. Transmission Voltage (Logarithmic)\n"
-        f"({power/1e6:.0f} MW, 5% Loss Limit)"
+def plot_weight_vs_voltage_vs_power_for_1km_al(length,
+                                               resistivity_aluminum,
+                                               density_al,
+                                               density_kapton,
+                                               density_bn,
+                                               density_mesh,
+                                               E_dil,
+                                               safety_factor):
+    """
+    3D surface of log10(Weight) vs. log10(Voltage) and log10(Power),
+    for a 1 km Aluminum cable under a 5% loss limit.
+    """
+    # log-spaced voltages (1 kV → 100 kV) and powers (1 kW → 1 MW)
+    voltages = np.logspace(3, 5, 50)
+    powers   = np.logspace(3, 6, 100)
+
+    # Prepare mesh
+    Vg, Pg = np.meshgrid(voltages, powers)
+    Wsurf  = np.zeros_like(Vg)
+
+    # Fixed layers
+    loss_limit       = 0.05
+    thickness_bn     = 0.0001
+    thickness_mesh   = 0.001
+
+    # Fill the surface
+    for i, P in enumerate(powers):
+        for j, V in enumerate(voltages):
+            t_kap = InsulationThickness(V, E_dil, safety_factor)
+            r_cond = conductor_radius(
+                resistivity_aluminum, V, length, P, loss_limit
+            )
+            vols = VolumeConductor(r_cond, t_kap, thickness_bn, thickness_mesh)
+            mpm = ComputeMassPerMeter(
+                vols[0], vols[1], vols[2], vols[3],
+                density_al, density_kapton, density_bn, density_mesh
+            )
+            Wsurf[i, j] = mpm * length
+
+    # Take logs for plotting
+    logV = np.log10(Vg)
+    logP = np.log10(Pg)
+    logW = np.log10(Wsurf)
+
+    # Plot
+    fig = plt.figure(figsize=(10, 7))
+    ax  = fig.add_subplot(111, projection='3d')
+
+    surf = ax.plot_surface(
+        logV, logP, logW,
+        cmap='viridis',
+        linewidth=0, antialiased=True,
     )
-    plt.grid(True)
-    plt.legend()
+
+    ax.set_xlabel("log₁₀ Voltage (V)")
+    ax.set_ylabel("log₁₀ Power (W)")
+    ax.set_zlabel("log₁₀ Weight (kg)")
+    ax.set_title("1 km Al Cable Weight vs. Voltage & Power\n(5% Loss Limit)")
+
+    cbar = fig.colorbar(surf, shrink=0.5, aspect=10, label="log₁₀ Weight")
+    plt.tight_layout()
     plt.show()
+
 
 def plot_resistivity_vs_temperature():
     """
     Plots the resistivity of various materials versus temperature from -200°C to 250°C.
-    
-    The resistivity is computed using a linear model:
-        ρ(T) = ρ₀ [1 + α (T - T₀)]
-    where ρ₀ is the resistivity at the reference temperature T₀.
-    
-    Materials included:
-      - Copper: ρ₀ = 1.68e-8 Ω·m, α = 0.00393/°C, T₀ = 20°C
-      - Aluminum: ρ₀ = 2.82e-8 Ω·m, α = 0.00403/°C, T₀ = 20°C
-      - Tungsten: ρ₀ = 5.60e-8 Ω·m, α = 0.0045/°C, T₀ = 20°C
-      - Iron: ρ₀ = 9.71e-8 Ω·m, α = 0.005/°C, T₀ = 20°C
+    Uses a linear model: ρ(T) = ρ₀ [1 + α (T - T₀)]
     """
-    # Temperature range in °C
+    # Temperature range
     T = np.linspace(-200, 250, 500)
-    
-    # Define material properties: (ρ₀ [Ω·m], α [1/°C], T₀ [°C])
+
+    # Material properties: (ρ₀ [Ω·m], α [1/°C], T₀ [°C])
     materials = {
-        "Copper":   (1.68e-8, 0.00393, 20),
-        "Aluminum": (2.65e-8, 0.00403, 20),
+        "Copper":    (1.7e-8,  0.00393, 20),
+        "Aluminum":  (2.6e-8,  0.00403, 20),
+        "Calcium":   (3.39e-8, 0.00420, 20),  # α ≈ 0.0042/°C
+        "Beryllium": (3.99e-8, 0.00290, 20),  # α ≈ 0.0029/°C
+        "Magnesium": (4.39e-8, 0.00390, 20),  # α ≈ 0.0039/°C
+        "Silver":    (1.6e-8,  0.00380, 20),  # α ≈ 0.0038/°C
+        "Gold":      (2.2e-8,  0.00340, 20),  # α ≈ 0.0034/°C
     }
-    
+
     plt.figure(figsize=(10, 6))
-    
     for name, (rho0, alpha, T0) in materials.items():
-        # Calculate resistivity using the linear approximation
         rho = rho0 * (1 + alpha * (T - T0))
-        # Clip any negative resistivity values to zero (not physical)
-        rho = np.clip(rho, 0, None)
         plt.plot(T, rho, label=name)
-    
+
     plt.xlabel("Temperature (°C)")
     plt.ylabel("Resistivity (Ω·m)")
-    plt.title("Resistivity vs. Temperature for Various Materials")
+    plt.title("Resistivity vs. Temperature for Various Metals")
+    plt.yscale("log")            # optional: makes small differences easier to see
+    plt.grid(True, which="both", ls="--")
     plt.legend()
-    plt.grid(True)
     plt.show()
 
 
@@ -171,87 +173,98 @@ def ComputeMassPerMeter(volume_conductor, volume_L1, volume_L2, volume_L3, densi
     return Tol_mass
 
 def main():
-    # Given parameters in SI base units (meters, kilograms, seconds)
-    power = 1e6             # Power in watts (W) (1 MW)
-    voltage = 30000         # Transmission voltage in volts (V)
-    safety_factor = 5
-    E_dil = 272e6           # Dielectric strength in V/m (272 V/µm converted to V/m)
+    # Given parameters
+    power       = 1e6      # 1 MW
+    voltage     = 11000    # 30 kV
+    safety_fac  = 5
+    E_dil       = 272e6    # V/m
 
-    # Material properties in SI units
-    # Resistivities (Ω·m)
-    resistivity_aluminum = 3.73e-8  # Aluminum @ 121°C
-    resistivity_copper   = 2.357e-8 # Copper @ 121°C
+    # Conductor materials: ρ [Ω·m], density [kg/m³]
+    materials = {
+        "Aluminum":  (2.6e-8,  2700),
+        "Copper":    (1.7e-8, 8960),
+        "Calcium":   (3.39e-8,  1550),
+        "Beryllium": (3.99e-8,  1848),
+        "Magnesium": (4.39e-8,  1738),
+        "Silver":    (1.6e-8,   10490),
+        "Gold":      (2.2e-8,   19300),
+    }
 
-    # Densities (kg/m³)
-    density_al       = 2700    # Aluminum conductor
-    density_copper   = 8960    # Copper conductor
-    density_kapton   = 1420    # Kapton insulation (from 1.42 g/cm³)
-    density_bn       = 2100    # BN nano-coating (from 2.1 g/cm³)
-    density_mesh     = 2700    # Aluminum mesh
+    # Insulation / coating layer densities (kg/m³)
+    density_kapton = 1420
+    density_bn     = 2100
+    density_mesh   = 2700
 
-    # Define constant layer thicknesses in meters:
-    thickness_bn      = 0.0001   # BN nano-coating: 0.1 mm
-    thickness_al_mesh = 0.001    # Aluminum mesh: 1.0 mm
-    # Insulation thickness (Kapton) is computed based on voltage, dielectric strength, and safety factor.
-    thickness_kapton  = InsulationThickness(voltage, E_dil, safety_factor)
+    # Fixed layer thicknesses (m)
+    thickness_bn      = 0.0001
+    thickness_mesh    = 0.001
+    thickness_kapton  = InsulationThickness(voltage, E_dil, safety_fac)
 
-    # --- Initial calculation for a 1000 m aluminum cable ---
-    L_initial = 1000  # 1000 m cable length for initial report
-    radius_conductor_al = conductor_radius(resistivity_aluminum, voltage, L_initial, power, loss_limit=0.05)
-    volumes_al = VolumeConductor(radius_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh)
-    mass_per_meter_al = ComputeMassPerMeter(volumes_al[0], volumes_al[1], volumes_al[2], volumes_al[3],
-                                            density_al, density_kapton, density_bn, density_mesh)
-    total_weight_al = mass_per_meter_al * L_initial
-    total_radius_al = radius_conductor_al + thickness_kapton + thickness_bn + thickness_al_mesh
-    print(f"--- For a {L_initial} m aluminum cable ---")
-    print(f"Required conductor radius: {radius_conductor_al*1000:.3f} mm")
-    print(f"Kapton insulation thickness: {thickness_kapton*1000:.3f} mm")
-    print(f"Total cable radius: {total_radius_al*1000:.3f} mm")
-    print(f"Total cable weight: {total_weight_al:.2f} kg")
-    print(f"Total current: {power/voltage:.2f} A")
+    # Range of distances
+    distances = np.linspace(100, 10_000, 100)
 
-    # --- Plot total cable weight vs. cable length for Aluminum and Copper ---
-    distances = np.linspace(100, 10000, 100)  # Cable lengths from 100 m to 10 km
-    weights_al = []
-    weights_cu = []
+    # Prepare a dict to hold weight-vs-distance for each metal
+    weights = {metal: [] for metal in materials}
 
+    # Compute each curve
     for L in distances:
-        # Aluminum cable calculations
-        r_conductor_al = conductor_radius(resistivity_aluminum, voltage, L, power, loss_limit=0.05)
-        vols_al = VolumeConductor(r_conductor_al, thickness_kapton, thickness_bn, thickness_al_mesh)
-        m_per_meter_al = ComputeMassPerMeter(vols_al[0], vols_al[1], vols_al[2], vols_al[3],
-                                             density_al, density_kapton, density_bn, density_mesh)
-        weights_al.append(m_per_meter_al * L)
-        
-        # Copper cable calculations
-        r_conductor_cu = conductor_radius(resistivity_copper, voltage, L, power, loss_limit=0.05)
-        vols_cu = VolumeConductor(r_conductor_cu, thickness_kapton, thickness_bn, thickness_al_mesh)
-        m_per_meter_cu = ComputeMassPerMeter(vols_cu[0], vols_cu[1], vols_cu[2], vols_cu[3],
-                                             density_copper, density_kapton, density_bn, density_mesh)
-        weights_cu.append(m_per_meter_cu * L)
+        for metal, (rho, dens) in materials.items():
+            # conductor radius for this metal & length
+            r_cond = conductor_radius(rho, voltage, L, power, loss_limit=0.05)
 
-    plt.figure(figsize=(8, 6))
-    plt.plot(distances, weights_al, 'b-', lw=2, label='Aluminum Cable')
-    plt.plot(distances, weights_cu, 'r-', lw=2, label='Copper Cable')
+            # volumes of conductor + 3 layers
+            vols = VolumeConductor(r_cond,
+                                   thickness_kapton,
+                                   thickness_bn,
+                                   thickness_mesh)
+
+            # mass per meter
+            m_per_m = ComputeMassPerMeter(vols[0], vols[1], vols[2], vols[3],
+                                          dens,
+                                          density_kapton,
+                                          density_bn,
+                                          density_mesh)
+
+            # total weight for length L
+            weights[metal].append(m_per_m * L)
+
+    # Plot them all
+    plt.figure(figsize=(9,6))
+    for metal, curve in weights.items():
+        plt.plot(distances, curve, lw=2, label=metal)
+
     plt.xlabel("Distance (m)")
     plt.ylabel("Cable Weight (kg)")
-    plt.title(f"Lunar Transmission Line: Cable Weight vs. Distance\n({power/1e6} MW, {voltage/1e3} kV, Resistivity @ 121 °C; 5% Loss Limit)")
-    plt.legend()
+    plt.title(f"Transmission Cable Weight vs. Distance\n"
+              f"({power/1e6:.0f} MW, {voltage/1e3:.0f} kV, 5% Loss)")
     plt.grid(True)
+    plt.legend()
     plt.show()
 
-    # Now produce the new plot requested:
-    plot_weight_vs_voltage_for_1km_al(
-        power=power,
-        length=L_initial,
-        resistivity_aluminum=resistivity_aluminum,
-        density_al=density_al,
+ # Now produce the new plot requested:
+# -    plot_weight_vs_voltage_for_1km_al(
+# -        power=power,
+# -        length=1000,
+# -        resistivity_aluminum=2.6e-8,
+# -        density_al=2700,
+# -        density_kapton=density_kapton,
+# -        density_bn=density_bn,
+# -        density_mesh=density_mesh,
+# -        E_dil=E_dil,
+# -        safety_factor=5
+# -    )
+# replace your old 1-curve call with:
+    plot_weight_vs_voltage_vs_power_for_1km_al(
+        length=1000,
+        resistivity_aluminum=2.6e-8,
+        density_al=2700,
         density_kapton=density_kapton,
         density_bn=density_bn,
         density_mesh=density_mesh,
         E_dil=E_dil,
-        safety_factor=safety_factor
+        safety_factor=5
     )
+
 
 
 if __name__ == "__main__":
